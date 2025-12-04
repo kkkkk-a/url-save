@@ -3,10 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>メディアプレビュー＆保存ツール【完成・最終版】</title>
-    <link rel="icon" href="favicon.ico">
-    <!-- ドラッグ＆ドロップ機能のためのライブラリ -->
+    <title>メディアセーバー</title>
+    <link rel="manifest" href="manifest.json">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#007bff">
+    <link rel="icon" href="icon-192.webp" type="image/png">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
+    <script async src="https://platform.twitter.com/widgets.js" charset="utf-8"></script>
     <style>
         :root {
             --primary-color: #007bff;
@@ -16,6 +20,7 @@
             --text-color: #1c1e21;
             --subtle-text-color: #65676b;
             --border-color: #ced4da;
+            --twitter-color: #1DA1F2;
         }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
@@ -37,41 +42,47 @@
 
         #previewContainer { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 20px; }
         .preview-item { background-color: var(--surface-color); border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.12); overflow: hidden; display: flex; flex-direction: column; cursor: grab; }
-        .preview-item:active { cursor: grabbing; }
         
-        .thumbnail-container { width: 100%; height: 160px; position: relative; background-color: #eee; cursor: pointer; }
+        .thumbnail-container { width: 100%; height: 160px; position: relative; background-color: #e9ecef; cursor: pointer; display: flex; align-items: center; justify-content: center; }
         .thumbnail-container img { width: 100%; height: 100%; object-fit: cover; }
-        .video-icon { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 50px; height: 50px; background: rgba(0,0,0,0.5); border-radius: 50%; display: flex; align-items: center; justify-content: center; transition: transform 0.2s; pointer-events: none; }
-        .video-icon::after { content: '▶'; color: white; font-size: 20px; margin-left: 3px; }
-        .thumbnail-container:hover .video-icon { transform: translate(-50%, -50%) scale(1.1); }
-
+        .media-icon { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); transition: transform 0.2s; pointer-events: none; }
+        .media-icon.video { width: 50px; height: 50px; background: rgba(0,0,0,0.5); border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+        .media-icon.video::after { content: '▶'; color: white; font-size: 20px; margin-left: 3px; }
+        .media-icon.twitter, .media-icon.website { background: none; width: 60px; height: 60px; }
+        .media-icon.twitter svg { width: 100%; height: 100%; fill: var(--twitter-color); }
+        .media-icon.website svg { width: 100%; height: 100%; fill: #6c757d; }
+        
         .info { padding: 15px; display: flex; flex-direction: column; flex-grow: 1; }
-        .url-text { word-break: break-all; background-color: var(--background-color); padding: 8px; border-radius: 4px; font-size: 12px; color: var(--subtle-text-color); cursor: pointer; margin-bottom: 10px; flex-grow: 1; transition: background-color 0.2s; }
-        .url-text:hover { background-color: #e4e6eb; }
+        .url-text { word-break: break-all; background-color: var(--background-color); padding: 8px; border-radius: 4px; font-size: 12px; color: var(--subtle-text-color); cursor: pointer; margin-bottom: 10px; flex-grow: 1; }
         
         .item-actions { display: flex; justify-content: space-between; align-items: center; }
-        .favorite-button { background: none; border: none; font-size: 24px; cursor: pointer; color: #ccc; transition: color 0.2s, transform 0.2s; }
+        .favorite-button { background: none; border: none; font-size: 24px; cursor: pointer; color: #ccc; }
         .favorite-button.favorited { color: #fbc02d; }
-        .favorite-button:hover { transform: scale(1.2); }
-        .delete-button { padding: 6px 10px; border: none; background-color: #6c757d; color: white; border-radius: 4px; cursor: pointer; transition: background-color 0.2s; }
-        .delete-button:hover { background-color: #5a6268; }
+        .delete-button { padding: 6px 10px; border: none; background-color: #6c757d; color: white; border-radius: 4px; cursor: pointer; }
 
-        /* --- モーダルウィンドウのスタイル --- */
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.85); display: flex; align-items: center; justify-content: center; z-index: 2000; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; }
         .modal-overlay.visible { opacity: 1; pointer-events: auto; }
-        .modal-content { position: relative; max-width: 90vw; max-height: 90vh; }
-        .modal-content img { display: block; max-width: 100%; max-height: 90vh; border-radius: 4px; }
-        .modal-content iframe { border: none; width: 80vw; height: calc(80vw / 16 * 9); max-width: 1280px; max-height: 85vh; }
-        .modal-close-button { position: absolute; top: -40px; right: 0; color: #fff; font-size: 40px; line-height: 1; font-weight: bold; cursor: pointer; z-index: 2001; transition: transform 0.2s; }
-        .modal-close-button:hover { transform: scale(1.1); }
+        .modal-content { position: relative; max-width: 95vw; max-height: 95vh; width: 100%; height: 100%; background: #fff; border-radius: 8px; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+        .modal-content img { display: block; max-width: 100%; max-height: 100%; margin: auto; }
+        .modal-content iframe { border: none; width: 100%; height: 100%; }
+        .modal-close-button { position: absolute; top: 15px; right: 25px; color: #000; background: rgba(255,255,255,0.7); border-radius: 50%; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; font-size: 25px; line-height: 1; font-weight: bold; cursor: pointer; z-index: 2001; }
+        .modal-overlay[data-type="image"] .modal-close-button { color: #fff; background: rgba(0,0,0,0.5); }
         
+        .modal-error-notice { padding: 20px; text-align: center; color: var(--subtle-text-color); }
+        .modal-error-notice h3 { margin-top: 0; color: var(--text-color); }
+        .modal-error-notice a { display: inline-block; margin-top: 15px; padding: 10px 15px; background-color: var(--primary-color); color: #fff; text-decoration: none; border-radius: 5px; }
+        
+        /* ★追加：iframe埋め込み時の案内メッセージ */
+        .iframe-notice { position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); width: 90%; text-align: center; font-size: 12px; color: #fff; background: rgba(0,0,0,0.6); padding: 8px; border-radius: 4px; pointer-events: none; }
+        .iframe-notice a { color: #a0cfff; text-decoration: underline; pointer-events: auto; }
+
         .copy-feedback { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background-color: #28a745; color: white; padding: 10px 20px; border-radius: 5px; z-index: 2100; opacity: 0; transition: opacity 0.5s; pointer-events: none; }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="input-container">
-            <input type="text" id="urlInput" placeholder="画像 または YouTube動画のURLを貼り付け">
+            <input type="text" id="urlInput" placeholder="URLを貼り付け (画像, YouTube, X, Webサイト)">
             <button id="saveButton">保存</button>
         </div>
         <div class="actions-container">
@@ -86,247 +97,246 @@
         <div id="previewContainer"></div>
     </div>
 
-    <!-- モーダルウィンドウのHTML -->
     <div id="modal-overlay" class="modal-overlay">
-        <span id="modal-close-button" class="modal-close-button">&times;</span>
         <div id="modal-content" class="modal-content"></div>
+        <span id="modal-close-button" class="modal-close-button">&times;</span>
     </div>
     
-    <div id="copyFeedback" class="copy-feedback">コピーしました！</div>
+    <div id="copyFeedback" class="copy-feedback"></div>
 
-    <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            const urlInput = document.getElementById('urlInput');
-            const saveButton = document.getElementById('saveButton');
-            const previewContainer = document.getElementById('previewContainer');
-            const clearAllButton = document.getElementById('clearAllButton');
-            const sortSelect = document.getElementById('sortSelect');
-            const modalOverlay = document.getElementById('modal-overlay');
-            const modalContent = document.getElementById('modal-content');
-            const modalCloseButton = document.getElementById('modal-close-button');
-            const copyFeedback = document.getElementById('copyFeedback');
+<script>
+    // PWAのサービスワーカーを登録
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('sw.js').then(reg => console.log('SW registered.')).catch(err => console.log('SW registration failed: ', err));
+        });
+    }
 
-            let items = [];
+    document.addEventListener('DOMContentLoaded', () => {
+        // --- DOM要素の取得 ---
+        const urlInput = document.getElementById('urlInput');
+        const saveButton = document.getElementById('saveButton');
+        const previewContainer = document.getElementById('previewContainer');
+        const clearAllButton = document.getElementById('clearAllButton');
+        const sortSelect = document.getElementById('sortSelect');
+        const modalOverlay = document.getElementById('modal-overlay');
+        const modalContent = document.getElementById('modal-content');
+        const modalCloseButton = document.getElementById('modal-close-button');
+        const copyFeedback = document.getElementById('copyFeedback');
+        let items = [];
 
-            // ドラッグ＆ドロップの初期化
-            new Sortable(previewContainer, {
-                animation: 150,
-                onEnd: (evt) => {
-                    const movedItem = items.splice(evt.oldIndex, 1)[0];
-                    items.splice(evt.newIndex, 0, movedItem);
-                    saveItems();
-                    sortSelect.value = 'manual';
-                }
-            });
-
-            // --- イベントリスナー ---
-            saveButton.addEventListener('click', addItem);
-            urlInput.addEventListener('keypress', (e) => e.key === 'Enter' && addItem());
-            clearAllButton.addEventListener('click', clearAllItems);
-            sortSelect.addEventListener('change', renderItems);
-            modalCloseButton.addEventListener('click', closeModal);
-            modalOverlay.addEventListener('click', (e) => e.target === modalOverlay && closeModal());
-            window.addEventListener('keydown', (e) => e.key === 'Escape' && closeModal());
-
-            // --- データ処理 ---
-            function loadItems() {
-                const storedItems = localStorage.getItem('savedItems');
-                items = storedItems ? JSON.parse(storedItems) : [];
-                renderItems();
-            }
-
-            function saveItems() {
-                localStorage.setItem('savedItems', JSON.stringify(items));
-            }
-
-            async function addItem() {
-                const url = urlInput.value.trim();
-                if (!url) {
-                    alert('URLを入力してください。');
-                    return;
-                }
-                if (items.some(item => item.url === url)) {
-                    alert('このURLは既に追加されています。');
-                    return;
-                }
-
-                const newItem = await createItemObject(url);
-                items.unshift(newItem); // 先頭に追加
+        // --- ドラッグ＆ドロップの初期化（スマホのタップ誤操作防止対応済み） ---
+        new Sortable(previewContainer, {
+            animation: 150,
+            delay: 100,
+            delayOnTouchOnly: true,
+            onEnd: (evt) => {
+                const item = items.splice(evt.oldIndex, 1)[0];
+                items.splice(evt.newIndex, 0, item);
                 saveItems();
-                sortSelect.value = 'manual'; // ソート順を手動に戻す
-                renderItems();
-                urlInput.value = '';
+                sortSelect.value = 'manual';
             }
-            
-            function deleteItem(id) {
-                if (confirm('このアイテムを削除しますか？')) {
-                    items = items.filter(item => item.id !== id);
-                    saveItems();
-                    renderItems();
-                }
-            }
+        });
 
-            function toggleFavorite(id) {
-                const item = items.find(item => item.id === id);
-                if (item) {
-                    item.favorite = !item.favorite;
-                    saveItems();
-                    renderItems();
-                }
-            }
+        // --- イベントリスナー ---
+        saveButton.addEventListener('click', addItem);
+        urlInput.addEventListener('keypress', (e) => e.key === 'Enter' && addItem());
+        clearAllButton.addEventListener('click', clearAllItems);
+        sortSelect.addEventListener('change', renderItems);
+        modalCloseButton.addEventListener('click', closeModal);
+        modalOverlay.addEventListener('click', (e) => e.target === modalOverlay && closeModal());
+        window.addEventListener('keydown', (e) => e.key === 'Escape' && closeModal());
 
-            function clearAllItems() {
-                if (items.length === 0) {
-                    alert('削除するデータがありません。');
-                    return;
-                }
-                if (confirm('本当に全てのデータを削除しますか？\nこの操作は元に戻せません。')) {
-                    items = [];
-                    localStorage.removeItem('savedItems');
-                    renderItems();
-                    alert('全てのデータを削除しました。');
-                }
-            }
+        // --- データ管理関数 ---
+        function loadItems() { const data = localStorage.getItem('savedItems'); items = data ? JSON.parse(data) : []; renderItems(); }
+        function saveItems() { localStorage.setItem('savedItems', JSON.stringify(items)); }
+        function deleteItem(id) { if (confirm('このアイテムを削除しますか？')) { items = items.filter(item => item.id !== id); saveItems(); renderItems(); } }
+        function toggleFavorite(id) { const item = items.find(item => item.id === id); if (item) { item.favorite = !item.favorite; saveItems(); renderItems(); } }
+        function clearAllItems() { if (items.length === 0) { alert('削除するデータがありません。'); return; } if (confirm('本当に全てのデータを削除しますか？')) { items = []; localStorage.removeItem('savedItems'); renderItems(); alert('全てのデータを削除しました。'); } }
+
+        // --- メインロジック ---
+        async function addItem() {
+            const url = urlInput.value.trim();
+            if (!url) { alert('URLを入力してください。'); return; }
+            if (items.some(item => item.url === url)) { alert('このURLは既に追加されています。'); return; }
+            const newItem = await createItemObject(url);
+            items.unshift(newItem);
+            saveItems();
+            sortSelect.value = 'manual';
+            renderItems();
+            urlInput.value = '';
+        }
+
+        // --- URL判定 & オブジェクト生成 ---
+        function isUrlAnImage(url) { return new Promise(resolve => { const img = new Image(); img.onload = () => resolve(true); img.onerror = () => resolve(false); img.src = url; }); }
+        function getYoutubeId(url) { const regExp = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/|youtube\.com\/shorts\/)([a-zA-Z0-9_-]{11})/; const match = url.match(regExp); return match ? match[1] : null; }
+        function getTweetId(url) { const match = url.match(/(?:https?:\/\/)?(?:www\.)?(?:twitter|x)\.com\/(?:#!\/)?\w+\/status(?:es)?\/(\d+)/); return match ? match[1] : null; }
+
+        async function createItemObject(url) {
+            const item = { id: Date.now().toString(), url, timestamp: Date.now(), favorite: false };
             
-            async function createItemObject(url) {
-                const item = {
-                    id: Date.now().toString(),
-                    url: url,
-                    type: 'image', // default
-                    thumbnailUrl: url,
-                    timestamp: Date.now(),
-                    favorite: false
-                };
-                
-                const youtubeId = getYoutubeId(url);
-                if (youtubeId) {
-                    item.type = 'youtube';
-                    item.youtubeId = youtubeId; // IDを保存
-                    item.thumbnailUrl = `https://img.youtube.com/vi/${youtubeId}/hqdefault.jpg`;
-                }
+            // 判定の優先順位を YouTube -> X -> 画像 -> ウェブサイト に変更
+            const youtubeId = getYoutubeId(url);
+            if (youtubeId) {
+                item.type = 'youtube';
+                item.youtubeId = youtubeId;
+                item.thumbnailUrl = `https://img.youtube.com/vi/${youtubeId}/hqdefault.jpg`;
                 return item;
             }
 
-            function getYoutubeId(url) {
-                const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
-                const match = url.match(regExp);
-                return (match && match[2].length === 11) ? match[2] : null;
+            const tweetId = getTweetId(url);
+            if (tweetId) {
+                item.type = 'twitter';
+                item.tweetId = tweetId;
+                return item;
             }
 
-            // --- 描画処理 ---
-            function renderItems() {
-                previewContainer.innerHTML = '';
-                const sortedItems = getSortedItems();
-                sortedItems.forEach(item => {
-                    const itemElement = createPreviewElement(item);
-                    previewContainer.appendChild(itemElement);
-                });
+            const isImage = await isUrlAnImage(url);
+            if (isImage) {
+                item.type = 'image';
+                item.thumbnailUrl = url;
+                return item;
             }
             
-            function getSortedItems() {
-                const sortType = sortSelect.value;
-                let sorted = [...items]; // 配列をコピーしてソート
-
-                switch (sortType) {
-                    case 'newest':
-                        return sorted.sort((a, b) => b.timestamp - a.timestamp);
-                    case 'oldest':
-                        return sorted.sort((a, b) => a.timestamp - b.timestamp);
-                    case 'favorites':
-                        // お気に入りを優先し、その中では新しい順
-                        return sorted.filter(item => item.favorite).sort((a, b) => b.timestamp - a.timestamp);
-                    case 'manual':
-                    default:
-                        return items; // 保存されている順序
-                }
+            // 上記のいずれにも当てはまらない場合
+            item.type = 'website';
+            try {
+                const hostname = new URL(url).hostname;
+                item.thumbnailUrl = `https://www.google.com/s2/favicons?sz=64&domain_url=${hostname}`;
+            } catch (e) {
+                // 不正なURLの場合、thumbnailUrlは設定されない
             }
+            return item;
+        }
 
-            function createPreviewElement(item) {
-                const itemDiv = document.createElement('div');
-                itemDiv.className = 'preview-item';
-                itemDiv.dataset.id = item.id;
+        // --- 描画関数 ---
+        function renderItems() { previewContainer.innerHTML = ''; getSortedItems().forEach(item => previewContainer.appendChild(createPreviewElement(item))); }
+        function getSortedItems() { const type = sortSelect.value; let sorted = [...items]; switch (type) { case 'newest': return sorted.sort((a, b) => b.timestamp - a.timestamp); case 'oldest': return sorted.sort((a, b) => a.timestamp - b.timestamp); case 'favorites': return sorted.filter(i => i.favorite).sort((a, b) => b.timestamp - a.timestamp); default: return items; } }
 
-                const thumbnailContainer = document.createElement('div');
-                thumbnailContainer.className = 'thumbnail-container';
-                thumbnailContainer.addEventListener('click', () => openModal(item));
+        /**
+         * ★最重要修正点★
+         * 各コンテンツタイプごとに表示処理を完全に分離
+         */
+        function createPreviewElement(item) {
+            const itemDiv = document.createElement('div');
+            itemDiv.className = 'preview-item';
+            itemDiv.dataset.id = item.id;
+            const thumbnailContainer = document.createElement('div');
+            thumbnailContainer.className = 'thumbnail-container';
+            thumbnailContainer.addEventListener('click', () => openModal(item));
 
-                const img = document.createElement('img');
-                img.src = item.thumbnailUrl;
-                img.onerror = () => { img.src = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiB2aWV3Qm94PSIwIDAgMjQgMjQiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2NjYyIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxjaXJjbGUgY3g9IjEyIiBjeT0iMTIiIHI9IjEwIj48L2NpcmNsZT48bGluZSB4MT0iNC45MyIgeTE9IjQuOTMiIHgyPSIxOS4wNyIgeTI9IjE5LjA3Ij48L2xpbmU+PC9zdmc+'; };
-                thumbnailContainer.appendChild(img);
-
-                if (item.type === 'youtube') {
-                    const videoIcon = document.createElement('div');
-                    videoIcon.className = 'video-icon';
-                    thumbnailContainer.appendChild(videoIcon);
-                }
-                itemDiv.appendChild(thumbnailContainer);
-                
-                const infoDiv = document.createElement('div');
-                infoDiv.className = 'info';
-
-                const urlText = document.createElement('p');
-                urlText.className = 'url-text';
-                urlText.textContent = item.url;
-                urlText.title = "クリックしてURLをコピー";
-                urlText.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    navigator.clipboard.writeText(item.url).then(() => showCopyFeedback());
-                });
-                infoDiv.appendChild(urlText);
-                
-                const actionsDiv = document.createElement('div');
-                actionsDiv.className = 'item-actions';
-
-                const favButton = document.createElement('button');
-                favButton.className = `favorite-button ${item.favorite ? 'favorited' : ''}`;
-                favButton.innerHTML = '&#9733;'; // 星マーク
-                favButton.title = 'お気に入りに追加/解除';
-                favButton.addEventListener('click', (e) => { e.stopPropagation(); toggleFavorite(item.id); });
-                actionsDiv.appendChild(favButton);
-
-                const deleteButton = document.createElement('button');
-                deleteButton.className = 'delete-button';
-                deleteButton.textContent = '削除';
-                deleteButton.addEventListener('click', (e) => { e.stopPropagation(); deleteItem(item.id); });
-                actionsDiv.appendChild(deleteButton);
-                
-                infoDiv.appendChild(actionsDiv);
-                itemDiv.appendChild(infoDiv);
-
-                return itemDiv;
-            }
-
-            function openModal(item) {
-                modalContent.innerHTML = '';
-                if (item.type === 'image') {
+            // タイプに応じてサムネイルの中身を構築
+            switch (item.type) {
+                case 'image':
+                case 'youtube':
                     const img = document.createElement('img');
-                    img.src = item.url;
-                    modalContent.appendChild(img);
-                } else if (item.type === 'youtube') {
-                    const iframe = document.createElement('iframe');
-                    iframe.src = `https://www.youtube.com/embed/${item.youtubeId}?autoplay=1&rel=0`;
-                    iframe.setAttribute('frameborder', '0');
-                    iframe.setAttribute('allow', 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture');
-                    iframe.setAttribute('allowfullscreen', '');
-                    modalContent.appendChild(iframe);
-                }
-                modalOverlay.classList.add('visible');
-            }
+                    img.src = item.thumbnailUrl;
+                    img.onerror = () => { img.src = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiB2aWV3Qm94PSIwIDAgMjQgMjQiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2NjYyIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxjaXJjbGUgY3g9IjEyIiBjeT0iMTIiIHI9IjEwIj48L2NpcmNsZT48bGluZSB4MT0iNC45MyIgeTE9IjQuOTMiIHgyPSIxOS4wNyIgeTI9IjE5LjA3Ij48L2xpbmU+PC9zdmc+'; };
+                    thumbnailContainer.appendChild(img);
+                    if (item.type === 'youtube') {
+                        const videoIcon = document.createElement('div');
+                        videoIcon.className = 'media-icon video';
+                        thumbnailContainer.appendChild(videoIcon);
+                    }
+                    break;
 
-            function closeModal() {
-                modalOverlay.classList.remove('visible');
-                modalContent.innerHTML = ''; // iframeの再生を確実に止める
+                case 'website':
+                    const faviconImg = document.createElement('img');
+                    faviconImg.src = item.thumbnailUrl;
+                    faviconImg.className = 'favicon'; // Favicon用のスタイルを適用
+                    faviconImg.onerror = () => {
+                        // Faviconが読み込めなかった場合は、デフォルトのウェブサイトアイコンを表示
+                        thumbnailContainer.innerHTML = `<div class="media-icon website"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v-1.07zM18.93 10.21c-.23.49-.51.95-.83 1.37l-2.1-2.1.92-3.11c.97.86 1.63 2.03 1.82 3.35H18.93zM13 17.93V15c0-1.1-.9-2-2-2h-1L5.21 7.21c.58-.13 1.18-.21 1.79-.21 4.08 0 7.44 3 7.93 7h-2.07c-.19-1.32-.86-2.49-1.82-3.35l-.92 3.11 2.1 2.1c.32-.42.6-.88.83-1.37H13v3.93z"></path></svg></div>`;
+                    };
+                    thumbnailContainer.appendChild(faviconImg);
+                    break;
+
+                case 'twitter':
+                    const twitterIcon = document.createElement('div');
+                    twitterIcon.className = 'media-icon twitter';
+                    twitterIcon.innerHTML = `<svg viewBox="0 0 24 24"><g><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"></path></g></svg>`;
+                    thumbnailContainer.appendChild(twitterIcon);
+                    break;
             }
+            itemDiv.appendChild(thumbnailContainer);
             
-            function showCopyFeedback() {
-                copyFeedback.style.opacity = '1';
-                setTimeout(() => { copyFeedback.style.opacity = '0'; }, 1500);
-            }
+            // --- Info Div (URL Text, Actions) ---
+            const infoDiv = document.createElement('div');
+            infoDiv.className = 'info';
+            const urlText = document.createElement('p');
+            urlText.className = 'url-text'; urlText.textContent = item.url; urlText.title = "URLをコピー";
+            urlText.addEventListener('click', (e) => { e.stopPropagation(); navigator.clipboard.writeText(item.url).then(() => showCopyFeedback()); });
+            infoDiv.appendChild(urlText);
+            const actionsDiv = document.createElement('div');
+            actionsDiv.className = 'item-actions';
+            const favButton = document.createElement('button');
+            favButton.className = `favorite-button ${item.favorite ? 'favorited' : ''}`; favButton.innerHTML = '&#9733;'; favButton.title = 'お気に入り';
+            favButton.addEventListener('click', (e) => { e.stopPropagation(); toggleFavorite(item.id); });
+            actionsDiv.appendChild(favButton);
+            const deleteButton = document.createElement('button');
+            deleteButton.className = 'delete-button'; deleteButton.textContent = '削除';
+            deleteButton.addEventListener('click', (e) => { e.stopPropagation(); deleteItem(item.id); });
+            actionsDiv.appendChild(deleteButton);
+            infoDiv.appendChild(actionsDiv);
+            itemDiv.appendChild(infoDiv);
+            return itemDiv;
+        }
 
-            // --- 初期化 ---
-            loadItems();
-        });
-    </script>
+        // --- モーダル表示関数 ---
+        function openModal(item) {
+            modalOverlay.dataset.type = item.type;
+            modalContent.innerHTML = '';
+            const showError = (message, url) => { modalContent.innerHTML = `<div class="modal-error-notice"><h3>表示できません</h3><p>${message}</p><a href="${url}" target="_blank" rel="noopener noreferrer">元のサイトで表示する</a></div>`; };
+            if (item.type === 'image') {
+                const img = document.createElement('img');
+                img.src = item.url;
+                img.onerror = () => { showError('画像ファイルを読み込めませんでした。', item.url); };
+                modalContent.appendChild(img);
+            } else if (item.type === 'youtube') {
+                const iframe = document.createElement('iframe');
+                iframe.src = `https://www.youtube.com/embed/${item.youtubeId}?autoplay=1&rel=0`;
+                iframe.setAttribute('allow', 'accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture; web-share');
+                iframe.setAttribute('allowfullscreen', '');
+                modalContent.appendChild(iframe);
+            } else if (item.type === 'website') {
+                const iframe = document.createElement('iframe');
+                iframe.src = item.url;
+                iframe.setAttribute('sandbox', 'allow-forms allow-scripts allow-same-origin allow-popups');
+                modalContent.appendChild(iframe);
+                const notice = document.createElement('div');
+                notice.className = 'iframe-notice';
+                notice.innerHTML = `表示されない場合、サイト側で埋め込みがブロックされています。<br><a href="${item.url}" target="_blank" rel="noopener noreferrer">新しいタブで開く</a>`;
+                modalOverlay.appendChild(notice);
+
+            } else if (item.type === 'twitter') {
+                const twitterWrapper = document.createElement('div');
+                twitterWrapper.style.cssText = "max-height: 90vh; overflow-y: auto; width: 100%; max-width: 550px; background: #fff; border-radius: 8px;";
+                modalContent.appendChild(twitterWrapper);
+                twttr.widgets.createTweet(item.tweetId, twitterWrapper, { theme: 'light', conversation: 'none' }).then(el => { if (!el) { showError('ツイートの読み込みに失敗しました。', item.url); } });
+            }
+            modalOverlay.classList.add('visible');
+        }
+        
+        function closeModal() {
+            modalOverlay.classList.remove('visible');
+            modalContent.innerHTML = '';
+            const existingNotice = modalOverlay.querySelector('.iframe-notice');
+            if (existingNotice) {
+                existingNotice.remove();
+            }
+        }
+
+        function showCopyFeedback() {
+            copyFeedback.textContent = 'コピーしました！';
+            copyFeedback.style.opacity = '1';
+            setTimeout(() => {
+                copyFeedback.style.opacity = '0';
+            }, 1500);
+        }
+
+        // --- 初期化 ---
+        loadItems();
+    });
+</script>
 </body>
 </html>
