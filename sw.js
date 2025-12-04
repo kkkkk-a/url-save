@@ -1,4 +1,4 @@
-const CACHE_NAME = 'media-saver-cache-v3'; // Cache version updated
+const CACHE_NAME = 'media-saver-cache-v4'; // Cache version updated
 const URLS_TO_CACHE = [
   '.',
   'index.html',
