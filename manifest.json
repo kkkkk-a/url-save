@@ -1,0 +1,16 @@
+{
+  "name": "メディアセーバー",
+  "short_name": "メディアセーバー",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#f0f2f5",
+  "theme_color": "#007bff",
+  "description": "画像や動画のURLを保存・管理できるツールです。",
+  "icons": [
+    {
+      "src": "favicon.webp",
+      "type": "image/webp",
+      "sizes": "192x192"
+    }
+  ]
+}
