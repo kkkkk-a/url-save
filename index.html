@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>メディアプレビュー＆保存ツール【完成・最終版】</title>
+    <!-- ドラッグ＆ドロップ機能のためのライブラリ -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
+    <style>
+        :root {
+            --primary-color: #007bff;
+            --danger-color: #dc3545;
+            --background-color: #f0f2f5;
+            --surface-color: #ffffff;
+            --text-color: #1c1e21;
+            --subtle-text-color: #65676b;
+            --border-color: #ced4da;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: var(--background-color);
+            color: var(--text-color);
+        }
+        .container { max-width: 1400px; margin: 0 auto; }
+        .input-container { display: flex; gap: 10px; margin-bottom: 20px; background-color: var(--surface-color); padding: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.12); }
+        #urlInput { flex-grow: 1; padding: 12px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 16px; }
+        #saveButton { padding: 12px 24px; border: none; background-color: var(--primary-color); color: white; border-radius: 6px; cursor: pointer; font-size: 16px; transition: background-color 0.2s; }
+        #saveButton:hover { background-color: #0056b3; }
+        
+        .actions-container { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding: 0 5px; }
+        #sortSelect { padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border-color); font-size: 14px; }
+        #clearAllButton { padding: 8px 15px; border: none; background-color: var(--danger-color); color: white; border-radius: 6px; cursor: pointer; font-size: 14px; transition: background-color 0.2s; }
+        #clearAllButton:hover { background-color: #c82333; }
+
+        #previewContainer { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 20px; }
+        .preview-item { background-color: var(--surface-color); border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.12); overflow: hidden; display: flex; flex-direction: column; cursor: grab; }
+        .preview-item:active { cursor: grabbing; }
+        
+        .thumbnail-container { width: 100%; height: 160px; position: relative; background-color: #eee; cursor: pointer; }
+        .thumbnail-container img { width: 100%; height: 100%; object-fit: cover; }
+        .video-icon { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 50px; height: 50px; background: rgba(0,0,0,0.5); border-radius: 50%; display: flex; align-items: center; justify-content: center; transition: transform 0.2s; pointer-events: none; }
+        .video-icon::after { content: '▶'; color: white; font-size: 20px; margin-left: 3px; }
+        .thumbnail-container:hover .video-icon { transform: translate(-50%, -50%) scale(1.1); }
+
+        .info { padding: 15px; display: flex; flex-direction: column; flex-grow: 1; }
+        .url-text { word-break: break-all; background-color: var(--background-color); padding: 8px; border-radius: 4px; font-size: 12px; color: var(--subtle-text-color); cursor: pointer; margin-bottom: 10px; flex-grow: 1; transition: background-color 0.2s; }
+        .url-text:hover { background-color: #e4e6eb; }
+        
+        .item-actions { display: flex; justify-content: space-between; align-items: center; }
+        .favorite-button { background: none; border: none; font-size: 24px; cursor: pointer; color: #ccc; transition: color 0.2s, transform 0.2s; }
+        .favorite-button.favorited { color: #fbc02d; }
+        .favorite-button:hover { transform: scale(1.2); }
+        .delete-button { padding: 6px 10px; border: none; background-color: #6c757d; color: white; border-radius: 4px; cursor: pointer; transition: background-color 0.2s; }
+        .delete-button:hover { background-color: #5a6268; }
+
+        /* --- モーダルウィンドウのスタイル --- */
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.85); display: flex; align-items: center; justify-content: center; z-index: 2000; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; }
+        .modal-overlay.visible { opacity: 1; pointer-events: auto; }
+        .modal-content { position: relative; max-width: 90vw; max-height: 90vh; }
+        .modal-content img { display: block; max-width: 100%; max-height: 90vh; border-radius: 4px; }
+        .modal-content iframe { border: none; width: 80vw; height: calc(80vw / 16 * 9); max-width: 1280px; max-height: 85vh; }
+        .modal-close-button { position: absolute; top: -40px; right: 0; color: #fff; font-size: 40px; line-height: 1; font-weight: bold; cursor: pointer; z-index: 2001; transition: transform 0.2s; }
+        .modal-close-button:hover { transform: scale(1.1); }
+        
+        .copy-feedback { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background-color: #28a745; color: white; padding: 10px 20px; border-radius: 5px; z-index: 2100; opacity: 0; transition: opacity 0.5s; pointer-events: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="input-container">
+            <input type="text" id="urlInput" placeholder="画像 または YouTube動画のURLを貼り付け">
+            <button id="saveButton">保存</button>
+        </div>
+        <div class="actions-container">
+            <select id="sortSelect">
+                <option value="manual">手動の並び順</option>
+                <option value="newest">新しい順</option>
+                <option value="oldest">古い順</option>
+                <option value="favorites">お気に入り</option>
+            </select>
+            <button id="clearAllButton">全データを削除</button>
+        </div>
+        <div id="previewContainer"></div>
+    </div>
+
+    <!-- モーダルウィンドウのHTML -->
+    <div id="modal-overlay" class="modal-overlay">
+        <span id="modal-close-button" class="modal-close-button">&times;</span>
+        <div id="modal-content" class="modal-content"></div>
+    </div>
+    
+    <div id="copyFeedback" class="copy-feedback">コピーしました！</div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const urlInput = document.getElementById('urlInput');
+            const saveButton = document.getElementById('saveButton');
+            const previewContainer = document.getElementById('previewContainer');
+            const clearAllButton = document.getElementById('clearAllButton');
+            const sortSelect = document.getElementById('sortSelect');
+            const modalOverlay = document.getElementById('modal-overlay');
+            const modalContent = document.getElementById('modal-content');
+            const modalCloseButton = document.getElementById('modal-close-button');
+            const copyFeedback = document.getElementById('copyFeedback');
+
+            let items = [];
+
+            // ドラッグ＆ドロップの初期化
+            new Sortable(previewContainer, {
+                animation: 150,
+                onEnd: (evt) => {
+                    const movedItem = items.splice(evt.oldIndex, 1)[0];
+                    items.splice(evt.newIndex, 0, movedItem);
+                    saveItems();
+                    sortSelect.value = 'manual';
+                }
+            });
+
+            // --- イベントリスナー ---
+            saveButton.addEventListener('click', addItem);
+            urlInput.addEventListener('keypress', (e) => e.key === 'Enter' && addItem());
+            clearAllButton.addEventListener('click', clearAllItems);
+            sortSelect.addEventListener('change', renderItems);
+            modalCloseButton.addEventListener('click', closeModal);
+            modalOverlay.addEventListener('click', (e) => e.target === modalOverlay && closeModal());
+            window.addEventListener('keydown', (e) => e.key === 'Escape' && closeModal());
+
+            // --- データ処理 ---
+            function loadItems() {
+                const storedItems = localStorage.getItem('savedItems');
+                items = storedItems ? JSON.parse(storedItems) : [];
+                renderItems();
+            }
+
+            function saveItems() {
+                localStorage.setItem('savedItems', JSON.stringify(items));
+            }
+
+            async function addItem() {
+                const url = urlInput.value.trim();
+                if (!url) {
+                    alert('URLを入力してください。');
+                    return;
+                }
+                if (items.some(item => item.url === url)) {
+                    alert('このURLは既に追加されています。');
+                    return;
+                }
+
+                const newItem = await createItemObject(url);
+                items.unshift(newItem); // 先頭に追加
+                saveItems();
+                sortSelect.value = 'manual'; // ソート順を手動に戻す
+                renderItems();
+                urlInput.value = '';
+            }
+            
+            function deleteItem(id) {
+                if (confirm('このアイテムを削除しますか？')) {
+                    items = items.filter(item => item.id !== id);
+                    saveItems();
+                    renderItems();
+                }
+            }
+
+            function toggleFavorite(id) {
+                const item = items.find(item => item.id === id);
+                if (item) {
+                    item.favorite = !item.favorite;
+                    saveItems();
+                    renderItems();
+                }
+            }
+
+            function clearAllItems() {
+                if (items.length === 0) {
+                    alert('削除するデータがありません。');
+                    return;
+                }
+                if (confirm('本当に全てのデータを削除しますか？\nこの操作は元に戻せません。')) {
+                    items = [];
+                    localStorage.removeItem('savedItems');
+                    renderItems();
+                    alert('全てのデータを削除しました。');
+                }
+            }
+            
+            async function createItemObject(url) {
+                const item = {
+                    id: Date.now().toString(),
+                    url: url,
+                    type: 'image', // default
+                    thumbnailUrl: url,
+                    timestamp: Date.now(),
+                    favorite: false
+                };
+                
+                const youtubeId = getYoutubeId(url);
+                if (youtubeId) {
+                    item.type = 'youtube';
+                    item.youtubeId = youtubeId; // IDを保存
+                    item.thumbnailUrl = `https://img.youtube.com/vi/${youtubeId}/hqdefault.jpg`;
+                }
+                return item;
+            }
+
+            function getYoutubeId(url) {
+                const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+                const match = url.match(regExp);
+                return (match && match[2].length === 11) ? match[2] : null;
+            }
+
+            // --- 描画処理 ---
+            function renderItems() {
+                previewContainer.innerHTML = '';
+                const sortedItems = getSortedItems();
+                sortedItems.forEach(item => {
+                    const itemElement = createPreviewElement(item);
+                    previewContainer.appendChild(itemElement);
+                });
+            }
+            
+            function getSortedItems() {
+                const sortType = sortSelect.value;
+                let sorted = [...items]; // 配列をコピーしてソート
+
+                switch (sortType) {
+                    case 'newest':
+                        return sorted.sort((a, b) => b.timestamp - a.timestamp);
+                    case 'oldest':
+                        return sorted.sort((a, b) => a.timestamp - b.timestamp);
+                    case 'favorites':
+                        // お気に入りを優先し、その中では新しい順
+                        return sorted.filter(item => item.favorite).sort((a, b) => b.timestamp - a.timestamp);
+                    case 'manual':
+                    default:
+                        return items; // 保存されている順序
+                }
+            }
+
+            function createPreviewElement(item) {
+                const itemDiv = document.createElement('div');
+                itemDiv.className = 'preview-item';
+                itemDiv.dataset.id = item.id;
+
+                const thumbnailContainer = document.createElement('div');
+                thumbnailContainer.className = 'thumbnail-container';
+                thumbnailContainer.addEventListener('click', () => openModal(item));
+
+                const img = document.createElement('img');
+                img.src = item.thumbnailUrl;
+                img.onerror = () => { img.src = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiB2aWV3Qm94PSIwIDAgMjQgMjQiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2NjYyIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxjaXJjbGUgY3g9IjEyIiBjeT0iMTIiIHI9IjEwIj48L2NpcmNsZT48bGluZSB4MT0iNC45MyIgeTE9IjQuOTMiIHgyPSIxOS4wNyIgeTI9IjE5LjA3Ij48L2xpbmU+PC9zdmc+'; };
+                thumbnailContainer.appendChild(img);
+
+                if (item.type === 'youtube') {
+                    const videoIcon = document.createElement('div');
+                    videoIcon.className = 'video-icon';
+                    thumbnailContainer.appendChild(videoIcon);
+                }
+                itemDiv.appendChild(thumbnailContainer);
+                
+                const infoDiv = document.createElement('div');
+                infoDiv.className = 'info';
+
+                const urlText = document.createElement('p');
+                urlText.className = 'url-text';
+                urlText.textContent = item.url;
+                urlText.title = "クリックしてURLをコピー";
+                urlText.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    navigator.clipboard.writeText(item.url).then(() => showCopyFeedback());
+                });
+                infoDiv.appendChild(urlText);
+                
+                const actionsDiv = document.createElement('div');
+                actionsDiv.className = 'item-actions';
+
+                const favButton = document.createElement('button');
+                favButton.className = `favorite-button ${item.favorite ? 'favorited' : ''}`;
+                favButton.innerHTML = '&#9733;'; // 星マーク
+                favButton.title = 'お気に入りに追加/解除';
+                favButton.addEventListener('click', (e) => { e.stopPropagation(); toggleFavorite(item.id); });
+                actionsDiv.appendChild(favButton);
+
+                const deleteButton = document.createElement('button');
+                deleteButton.className = 'delete-button';
+                deleteButton.textContent = '削除';
+                deleteButton.addEventListener('click', (e) => { e.stopPropagation(); deleteItem(item.id); });
+                actionsDiv.appendChild(deleteButton);
+                
+                infoDiv.appendChild(actionsDiv);
+                itemDiv.appendChild(infoDiv);
+
+                return itemDiv;
+            }
+
+            function openModal(item) {
+                modalContent.innerHTML = '';
+                if (item.type === 'image') {
+                    const img = document.createElement('img');
+                    img.src = item.url;
+                    modalContent.appendChild(img);
+                } else if (item.type === 'youtube') {
+                    const iframe = document.createElement('iframe');
+                    iframe.src = `https://www.youtube.com/embed/${item.youtubeId}?autoplay=1&rel=0`;
+                    iframe.setAttribute('frameborder', '0');
+                    iframe.setAttribute('allow', 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture');
+                    iframe.setAttribute('allowfullscreen', '');
+                    modalContent.appendChild(iframe);
+                }
+                modalOverlay.classList.add('visible');
+            }
+
+            function closeModal() {
+                modalOverlay.classList.remove('visible');
+                modalContent.innerHTML = ''; // iframeの再生を確実に止める
+            }
+            
+            function showCopyFeedback() {
+                copyFeedback.style.opacity = '1';
+                setTimeout(() => { copyFeedback.style.opacity = '0'; }, 1500);
+            }
+
+            // --- 初期化 ---
+            loadItems();
+        });
+    </script>
+</body>
+</html>
